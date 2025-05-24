@@ -2,6 +2,7 @@
 
 import pandas as pd
 import torch
+import numpy as np
 from torch.utils.data import Dataset
 
 class DDIDataset(Dataset):
@@ -20,6 +21,36 @@ class DDIDataset(Dataset):
             'DB00855': 'antihistamine',
             # ... more types
         }
+
+
+    def load_drkg_embeddings(drkg_path):
+        """
+        Loads pre-trained DRKG embeddings and maps them to DrugBank IDs.
+        Returns:
+            - A tensor of shape (num_entities, emb_dim)
+            - A dictionary mapping DrugBank ID -> index in embedding matrix
+        """
+        df = pd.read_csv(drkg_path)
+        embedding_dim = len(df.columns) - 1  # Subtract 1 for 'entity' column
+        num_entities = len(df)
+
+        # Create embedding matrix
+        embedding_matrix = []
+        entity_to_idx = {}
+
+        for idx, row in df.iterrows():
+            entity_id = row['entity']
+            if entity_id.startswith("DrugBank::"):
+                drug_id = entity_id.split("::")[1]
+                embedding_matrix.append(row.values[1:].astype(np.float32))
+                entity_to_idx[drug_id] = len(entity_to_idx)
+
+        embedding_matrix = np.array(embedding_matrix)
+        embedding_tensor = torch.tensor(embedding_matrix, dtype=torch.float32)
+
+        print(f"Loaded DRKG embeddings for {len(entity_to_idx)} DrugBank entities")
+        return embedding_tensor, entity_to_idx
+
     def generate_negative_samples(self, drug1, drug2, k=5):
         if not self.use_neg_sampling:
             return []

@@ -8,18 +8,19 @@ from torch.utils.data import DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import pandas as pd
 from src.models.fuzzy_ddi import FuzzyDDI
 from src.models.mc_dropout import MCDropout
 from src.data.ddi_dataset import DDIDataset
 from sklearn.metrics import roc_auc_score, average_precision_score
-
+from src.data.ddi_dataset import DDIDataset, load_drkg_embeddings
+from src.utils.zero_shot_utils import build_similarity_matrix
 # -------------------------------
 # Configurations
 # -------------------------------
 
 CONFIG = {
-    "data_path": "./data/drugcombdb.csv",
+    "data_path": "/home/phd/dataset/fuzzyddi/drugcombdb.csv",
     "batch_size": 32,
     "embedding_dim": 512,
     "hidden_dim": 1024,
@@ -30,6 +31,20 @@ CONFIG = {
     "num_samples": 10,  # For MC Dropout uncertainty
     "device": "cuda" if torch.cuda.is_available() else "cpu"
 }
+'''
+# Configuration
+CONFIG = {
+    "data_path": "/home/phd/dataset/fuzzyddi/drugcombdb.csv",
+    "drkg_embedding_path": "/home/phd/dataset/fuzzyddi/drkg_embeddings.csv",
+    "batch_size": 32,
+    "embedding_dim": 512,
+    "hidden_dim": 1024,
+    "use_transformer": True,
+    "use_mc_dropout": True,
+    "device": "cuda" if torch.cuda.is_available() else "cpu"
+}
+'''
+
 
 # -------------------------------
 # Load Dataset
@@ -44,6 +59,13 @@ def load_dataset(data_path):
     dataset = DDIDataset(df, drug_map)
     return dataset, drug_map
 
+
+# Load DRKG embeddings
+drkg_embeddings, entity_to_idx = load_drkg_embeddings(CONFIG["drkg_embedding_path"])
+
+# Modify dataset to use DRKG mapping
+dataset = DDIDataset(df, entity_to_idx)  # Previously used drug_map — now use DRKG's entity_to_idx
+loader = DataLoader(dataset, batch_size=CONFIG["batch_size"], shuffle=True)
 # -------------------------------
 # Attention Visualization
 # -------------------------------
@@ -57,14 +79,14 @@ def visualize_attention(attn_weights, title="Transformer Attention"):
     plt.ylabel("Token")
     plt.show()
 
-# -------------------------------
+-----------------
 # MC Dropout Prediction
 # -------------------------------
 
 def predict_with_uncertainty(model, loader, device, num_samples=10):
     model.train()  # Keep in train mode to enable dropout
     probs = []
-
+    
     for batch in loader:
         drug_indices = batch['drug_indices'].to(device)
         doses = batch['doses'].to(device)
@@ -85,12 +107,21 @@ def train(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0
     y_true, y_pred = [], []
+    # train.py
 
+    mechanism_criterion = nn.CrossEntropyLoss()
+
+    # In training loop
+    
     for batch in loader:
         drug_indices = batch['drug_indices'].to(device)
         doses = batch['doses'].to(device)
         labels = batch['label'].to(device)
-
+        
+        mechanism_logits = model.mechanism_head(out)  # Assume you added this head
+        mechanism_labels = batch['mechanism_label'].to(device)
+        loss += 0.5 * mechanism_criterion(mechanism_logits, mechanism_labels)
+        
         optimizer.zero_grad()
         prob, logits, _ = model(drug_indices, doses=doses)
         loss = criterion(logits, labels)
@@ -158,7 +189,17 @@ if __name__ == "__main__":
         use_transformer=use_transformer,
         use_mc_dropout=use_mc_dropout
     ).to(device)
-
+    '''
+    model = FuzzyDDI.from_pretrained_embeddings(
+    drkg_embeddings,
+    embedding_dim=CONFIG["embedding_dim"],
+    hidden_dim=CONFIG["hidden_dim"],
+    use_transformer=CONFIG["use_transformer"],
+    use_mc_dropout=CONFIG["use_mc_dropout"]
+).to(CONFIG["device"])
+    '''
+    # Freeze DRKG embeddings
+    #model.entity_embeddings.weight.requires_grad = False
     # Optimizer & Loss
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.BCEWithLogitsLoss()
@@ -185,6 +226,14 @@ if __name__ == "__main__":
     # Visualize attention (if using Transformer)
     sample_batch = next(iter(loader))
     model.eval()
+    '''
+    sample_batch = next(iter(loader))
+    drug_indices = sample_batch['drug_indices'].to(device)
+    doses = sample_batch['doses'].to(device)
+
+    prob, logits, _ = model(drug_indices, doses=doses)
+    print("Predicted Probability:", prob.item())
+    '''
     with torch.no_grad():
         _, _, attn_weights = model(sample_batch['drug_indices'].to(device), sample_batch['doses'].to(device))
         if attn_weights is not None:

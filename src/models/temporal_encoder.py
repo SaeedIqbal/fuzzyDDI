@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class TemporalEncoder(nn.Module):
     """
@@ -45,3 +46,35 @@ class TemporalEncoder(nn.Module):
         # Use mean pooling over sequence dimension
         encoded_embeddings = encoded.mean(dim=1)
         return encoded_embeddings, attn_weights
+    
+'''
+
+
+class TemporalEncoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim, use_transformer=True, num_heads=4):
+        super(TemporalEncoder, self).__init__()
+        self.use_transformer = use_transformer
+        if use_transformer:
+            self.attn_weights = None
+            self.attn_layer = nn.MultiheadAttention(input_dim, num_heads=num_heads)
+        else:
+            self.encoder = nn.GRU(input_dim, hidden_dim, batch_first=True)
+
+    def forward(self, embeddings, doses=None):
+        if doses is not None:
+            embeddings += self.dose_proj(doses)
+
+        if self.use_transformer:
+            embeddings = embeddings.transpose(0, 1)  # (T, B, E)
+            out, self.attn_weights = self.attn_layer(
+                embeddings, embeddings, embeddings
+            )
+            out = out.transpose(0, 1)
+            encoded = out.mean(dim=1)
+        else:
+            encoded, _ = self.encoder(embeddings)
+            encoded = encoded.mean(dim=1)
+            self.attn_weights = None
+
+        return encoded, self.attn_weights
+'''

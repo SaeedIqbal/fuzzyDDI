@@ -19,7 +19,7 @@ class FuzzyDDI(nn.Module):
     - Applies fuzzy logic operations (conjunctive/disjunctive)
     - Supports temporal modeling and MC Dropout for uncertainty
     """
-
+    global num_mechanism_classes = 5
     def __init__(self, num_entities, embedding_dim=512, hidden_dim=1024,
                  use_transformer=True, use_mc_dropout=True):
         super(FuzzyDDI, self).__init__()
@@ -30,7 +30,7 @@ class FuzzyDDI(nn.Module):
         # GCN-based Projection Module
         self.gcn1 = nn.Linear(embedding_dim, hidden_dim)
         self.gcn2 = nn.Linear(hidden_dim, embedding_dim)
-
+        self.mechanism_head = nn.Linear(embedding_dim, num_mechanism_classes)  # e.g., 10
         # MLP Module
         self.mlp = nn.Sequential(
             MCDropout(p=0.3) if use_mc_dropout else nn.Dropout(0.3),
@@ -50,6 +50,45 @@ class FuzzyDDI(nn.Module):
             hidden_dim=hidden_dim,
             use_transformer=use_transformer
         )
+
+    def zero_shot_predict(self, unseen_drug1, unseen_drug2, drug_sim_matrix):
+        """
+        Predict interaction between unseen drugs using similarity matrix
+        :param unseen_drug1: index of new drug 1
+        :param unseen_drug2: index of new drug 2
+        :param drug_sim_matrix: [N x N] cosine similarity matrix of drug embeddings
+        """
+        sim1 = drug_sim_matrix[unseen_drug1]
+        sim2 = drug_sim_matrix[unseen_drug2]
+        weighted_emb1 = torch.matmul(sim1, self.entity_embeddings.weight)
+        weighted_emb2 = torch.matmul(sim2, self.entity_embeddings.weight)
+        combined = torch.cat([torch.min(weighted_emb1, weighted_emb2),
+                            torch.max(weighted_emb1, weighted_emb2)], dim=-1)
+        out = self.mlp(combined)
+        prob = self.sigmoid(self.classifier(out)).squeeze(-1)
+        return prob
+    
+    def multi_hop_query(self, drug_indices):
+        """
+        Perform multi-hop reasoning by combining multiple drugs.
+        Example: (DrugA ∧ DrugB) → InteractionType
+        """
+        d_embs = self.entity_embeddings(drug_indices)
+        d_embs = F.relu(self.gcn1(d_embs))
+        d_embs = self.gcn2(d_embs)
+
+        # Fuzzy logic on all combinations
+        embeddings = []
+        for i in range(d_embs.shape[1] - 1):
+            d1_emb = d_embs[:, i]
+            d2_emb = d_embs[:, i + 1]
+            conjunctive_emb = torch.min(d1_emb, d2_emb)
+            disjunctive_emb = torch.max(d1_emb, d2_emb)
+            combined = torch.cat([conjunctive_emb, disjunctive_emb], dim=-1)
+            embeddings.append(combined.unsqueeze(1))
+
+        combined = torch.cat(embeddings, dim=1).mean(dim=1)
+        return combined
 
     def forward(self, drug_indices, doses=None):
         """
@@ -93,3 +132,12 @@ class FuzzyDDI(nn.Module):
         prob = self.sigmoid(logits)
 
         return prob, logits, out
+    @classmethod
+    def from_pretrained_embeddings(cls, embedding_tensor, **kwargs):
+        """
+        Factory method to create model with pretrained DRKG embeddings.
+        """
+        num_entities, embedding_dim = embedding_tensor.shape
+        model = cls(num_entities=num_entities, embedding_dim=embedding_dim, **kwargs)
+        model.entity_embeddings.weight.data = embedding_tensor
+        return model
