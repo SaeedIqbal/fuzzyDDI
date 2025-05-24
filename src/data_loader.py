@@ -35,7 +35,7 @@ def load_drkg_embeddings(path):
 # ---------------------------
 
 if __name__ == "__main__":
-    base_path = "./data"
+    base_path = "/home/phd/data/fuzzyDDI"
 
     # Load datasets
     drugcombdb_df = load_drugcombdb(os.path.join(base_path, "drugcombdb.csv"))
