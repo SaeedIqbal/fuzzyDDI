@@ -1,0 +1,22 @@
+# config.yaml
+
+data:
+  dataset_path: "/home/phd/dataset/fuzzyddi/drugcombdb.csv"
+  drkg_embedding_path: "/home/phd/dataset/fuzzyddi/drkg_embeddings.csv"
+
+model:
+  embedding_dim: 512
+  hidden_dim: 1024
+  use_transformer: true
+  use_mc_dropout: true
+  num_mechanism_classes: 10
+
+training:
+  batch_size: 32
+  learning_rate: 0.0001
+  num_epochs: 50
+  weight_decay: 1e-5
+  margin: 1.0
+  k_neg_samples: 5
+
+device: "cuda" if available else "cpu"
