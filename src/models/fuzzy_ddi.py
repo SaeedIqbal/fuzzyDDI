@@ -115,7 +115,7 @@ class FuzzyDDI(nn.Module):
             d_embs, _ = self.temporal_encoder(d_embs, doses=doses)
         else:
             d_embs = d_embs.squeeze(1)
-
+        
         # Step 4: Fuzzy Logic Operations
         # Assume we're predicting interactions between two drugs
         d1_emb = d_embs[:, :1] if d_embs.dim() == 3 else d_embs[:1]
