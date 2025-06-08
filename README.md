@@ -1,4 +1,4 @@
-# 🧠 Fuzzy-DDI: A Robust Fuzzy Logic Query Model for Complex Drug–Drug Interaction Prediction
+# 🧠 Fuzzy-DDI++: Interpretable Drug–Drug Interaction Prediction via Fuzzy Logic Reasoning and Temporal Knowledge Graph Embedding
 
 > *"Fuzzy-DDI decomposes DDI predictions into relational projections and logical operations on rough sets during inference. Fuzzy logic makes it more fault-tolerant than binary logic models."*
 
